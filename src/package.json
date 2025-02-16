@@ -1,0 +1,8 @@
+{
+  "name": "src",
+  "main": "index.js",
+  "packageManager": "yarn@4.2.2",
+  "scripts": {
+    "start": "node index.js"
+  }
+}

@@ -1,0 +1,29 @@
+[GLOBAL]
+pants_version = "2.27.0rc1"
+backend_packages = [
+    "pants.backend.shell",
+    "pants.backend.plugin_development",
+    "pants.backend.python",
+    "plugin1",
+]
+
+pythonpath = ["%(buildroot)s/pants-plugins"]
+
+[python]
+enable_resolves = true
+interpreter_constraints = [">=3.9,<3.12"]
+default_resolve = "python-default"
+
+[python.resolves]
+python-default = "lockfiles/python-default.txt"
+
+[python.resolves_to_interpreter_constraints]
+python-default = ["==3.11.*"]
+
+[source]
+root_patterns.add = [
+    "pants-plugins",
+]
+
+[nodejs]
+package_manager = "npm"
