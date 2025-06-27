@@ -8,11 +8,13 @@ from pants.backend.javascript.subsystems.nodejs import (
     CorepackToolRequest,
     NodeJSProcessEnvironment,
     NodeJSToolProcess,
+    prepare_corepack_tool
 )
 from pants.engine.internals.native_engine import Digest, MergeDigests
 from pants.engine.internals.selectors import Get
+from pants.engine.intrinsics import merge_digests
 from pants.engine.process import Process
-from pants.engine.rules import Rule, collect_rules, rule
+from pants.engine.rules import Rule, collect_rules, implicitly, rule
 from pants.engine.unions import UnionRule
 from pants.util.logging import LogLevel
 
@@ -24,12 +26,11 @@ async def setup_node_tool_process(
 ) -> Process:
     if request.tool in ("npm", "npx", "pnpm", "yarn"):
         tool_name = request.tool.replace("npx", "npm")
-        corepack_tool = await Get(
-            CorepackToolDigest,
-            CorepackToolRequest(tool_name, request.tool_version),
+        corepack_tool = await prepare_corepack_tool(
+            CorepackToolRequest(tool_name, request.tool_version), **implicitly()
         )
-        input_digest = await Get(
-            Digest, MergeDigests([request.input_digest, corepack_tool.digest])
+        input_digest = await merge_digests(
+            MergeDigests([request.input_digest, corepack_tool.digest])
         )
     else:
         input_digest = request.input_digest

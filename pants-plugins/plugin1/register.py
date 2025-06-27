@@ -1,43 +1,54 @@
-from typing import Iterable, Union
+from typing import Callable, Iterable, Union
 from pants.backend.javascript.package_json import NodeBuildScriptTarget
 from pants.build_graph.build_file_aliases import BuildFileAliases
-from pants.engine.rules import Rule
+from pants.engine.rules import Rule, TaskRule
 from pants.engine.unions import UnionRule
-
+import dataclasses
 from pants.backend.experimental.javascript import register as js_register
 
 from .moneypatches import setup_node_tool_process, rules as moneypatches_rules
 
-# This monkeypatch method works in 2.27 but not 2.28
-# The rule filtering + additional registration also works in 2.27 but isn't expected to in 2.28
+# This monkeypatch method works in both 2.27 and 2.28!!
 from pants.backend.javascript.subsystems import nodejs as pants_nodejs
-
+# Need to monkeypatch here
 pants_nodejs.setup_node_tool_process = setup_node_tool_process
+
+def single_or_raise(rules: Iterable[TaskRule], lambda_filter: Callable[[TaskRule], bool]) -> TaskRule:
+    matching_rules = [
+        r for r in rules 
+        if lambda_filter(r)
+    ]
+    if len(matching_rules) != 1:
+        raise Exception(f"Expected 1 matching rule, got {len(matching_rules)}\n{matching_rules}")
+    return matching_rules[0]
 
 
 def rules() -> Iterable[Union[Rule, UnionRule]]:
     
-    def ignore_rule(rule):
-        # in 2.27 you can filter the rules out like this and register your own
-        # but in 2.28 this causes a rule graph error 'No source of dependency pants.backend.javascript.subsystems.nodejs.setup_node_tool_process'
-        return hasattr(rule, "canonical_name") and rule.canonical_name in [
-           "pants.backend.javascript.subsystems.nodejs.setup_node_tool_process",
-        ]
-
-    org_rules = [
-        r for r in js_register.rules() 
-        # if not ignore_rule(r)
+    custom_rules = [
+        *moneypatches_rules(),
     ]
-
-    rules = [
-        # In 2.27 you can register your own like this, but if you're using the 
-        # monkeypatch isn't not necessary. 
-        # *moneypatches_rules(),
-        *org_rules,
+    original_rules = [
+        *js_register.rules(),
     ]
-
-    return rules
     
+    custom_rule = single_or_raise(
+        custom_rules,
+        lambda r: isinstance(r, TaskRule) and r.func.__name__ == "setup_node_tool_process"
+    )
+
+    patched_rules = []
+    for rule in original_rules:
+        if isinstance(rule, TaskRule) and rule.func.__name__ == "setup_node_tool_process":
+            # And also replace the callable stored in the original rule
+            patched_rules.append(dataclasses.replace(rule, func=custom_rule.func))
+        else:
+            patched_rules.append(rule)
+
+    return [
+        *patched_rules,
+    ]
+
 
 def target_types():
     return [
